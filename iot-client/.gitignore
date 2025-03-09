@@ -30,7 +30,6 @@ certs/
 constants.py
 
 # Environment
-.env.*
 !.env.template
 
 # IDE
