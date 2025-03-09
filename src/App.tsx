@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useEffect } from 'react';
 import { 
   Container, 
@@ -6,9 +7,14 @@ import {
   Grid,
   ThemeProvider,
   createTheme,
-  CssBaseline
+  CssBaseline,
+  Alert,
+  Chip
 } from '@mui/material';
 import ElectricMeterIcon from '@mui/icons-material/ElectricMeter';
+import SignalWifiStatusbar4BarIcon from '@mui/icons-material/SignalWifiStatusbar4Bar';
+import SignalWifiOffIcon from '@mui/icons-material/SignalWifiOff';
+import { eventHubService } from './services/eventHub';
 
 const darkTheme = createTheme({
   palette: {
@@ -29,40 +35,75 @@ const darkTheme = createTheme({
 interface TelemetryData {
   voltages: number[];
   currents: number[];
+  isConnected: boolean;
 }
 
 function App() {
   const [telemetryData, setTelemetryData] = useState<TelemetryData>({
     voltages: [],
-    currents: []
+    currents: [],
+    isConnected: false
   });
-
-  const fetchData = async () => {
-    try {
-      // Sample data - replace with actual IoT Hub data fetching
-      const sampleData = {
-        voltages: [5.0, 10.0, 15.0, 20.0, 25.0, 30.0],
-        currents: [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
-      };
-      setTelemetryData(sampleData);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    }
-  };
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
+    let subscription: any;
+
+    const connectToEventHub = async () => {
+      try {
+        setError(null);
+        subscription = await eventHubService.subscribe((data) => {
+          setTelemetryData(data);
+        });
+      } catch (err) {
+        setError('Failed to connect to IoT Hub. Please check your connection settings.');
+        console.error('Error connecting to Event Hub:', err);
+      }
+    };
+
+    connectToEventHub();
+
+    return () => {
+      if (subscription) {
+        subscription.close();
+      }
+      eventHubService.close();
+    };
   }, []);
+
+  const getConnectionStatusChip = () => (
+    <Chip
+      icon={telemetryData.isConnected ? <SignalWifiStatusbar4BarIcon /> : <SignalWifiOffIcon />}
+      label={telemetryData.isConnected ? "Connected" : "Disconnected"}
+      color={telemetryData.isConnected ? "success" : "error"}
+      variant="outlined"
+      sx={{ ml: 2 }}
+    />
+  );
+
+  if (error) {
+    return (
+      <ThemeProvider theme={darkTheme}>
+        <CssBaseline />
+        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+          <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+        </Container>
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Typography variant="h3" component="h1" gutterBottom sx={{ color: 'primary.main', display: 'flex', alignItems: 'center', gap: 2 }}>
-          <ElectricMeterIcon sx={{ fontSize: 40 }} />
+        <Typography variant="h3" component="h1" gutterBottom sx={{ 
+          color: 'primary.main', 
+          display: 'flex', 
+          alignItems: 'center'
+        }}>
+          <ElectricMeterIcon sx={{ fontSize: 40, mr: 2 }} />
           IoT Device Dashboard
+          {getConnectionStatusChip()}
         </Typography>
         
         <Grid container spacing={3}>
@@ -77,9 +118,14 @@ function App() {
                   background: 'linear-gradient(145deg, #1e2a3a 0%, #141e2a 100%)',
                   borderRadius: 2,
                   boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+                  opacity: telemetryData.isConnected ? 1 : 0.7,
                 }}
               >
-                <Typography variant="h6" gutterBottom sx={{ color: 'primary.main', borderBottom: '1px solid rgba(144, 202, 249, 0.2)', pb: 1 }}>
+                <Typography variant="h6" gutterBottom sx={{ 
+                  color: 'primary.main', 
+                  borderBottom: '1px solid rgba(144, 202, 249, 0.2)', 
+                  pb: 1
+                }}>
                   Channel {index + 1}
                 </Typography>
                 
@@ -88,8 +134,15 @@ function App() {
                     <Typography variant="body2" color="text.secondary">
                       Voltage
                     </Typography>
-                    <Typography variant="h4" sx={{ color: '#8884d8', fontWeight: 'bold' }}>
-                      {telemetryData.voltages[index]?.toFixed(1) || '0.0'}
+                    <Typography variant="h4" sx={{ 
+                      color: '#8884d8', 
+                      fontWeight: 'bold',
+                      opacity: telemetryData.isConnected ? 1 : 0.7 
+                    }}>
+                      {telemetryData.isConnected ? 
+                        (telemetryData.voltages[index]?.toFixed(1) || '0.0') : 
+                        '--'
+                      }
                       <Typography component="span" variant="h6" sx={{ ml: 1, opacity: 0.8 }}>V</Typography>
                     </Typography>
                   </Grid>
@@ -97,8 +150,15 @@ function App() {
                     <Typography variant="body2" color="text.secondary">
                       Current
                     </Typography>
-                    <Typography variant="h4" sx={{ color: '#82ca9d', fontWeight: 'bold' }}>
-                      {telemetryData.currents[index]?.toFixed(1) || '0.0'}
+                    <Typography variant="h4" sx={{ 
+                      color: '#82ca9d', 
+                      fontWeight: 'bold',
+                      opacity: telemetryData.isConnected ? 1 : 0.7
+                    }}>
+                      {telemetryData.isConnected ? 
+                        (telemetryData.currents[index]?.toFixed(1) || '0.0') : 
+                        '--'
+                      }
                       <Typography component="span" variant="h6" sx={{ ml: 1, opacity: 0.8 }}>A</Typography>
                     </Typography>
                   </Grid>
