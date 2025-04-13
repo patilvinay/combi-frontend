@@ -22,6 +22,8 @@ CORS(app)
 latest_telemetry_data = {
     'voltages': [],
     'currents': [],
+    'frequency': [],
+    'power': [],  # Added power
     'timestamp': None
 }
 
@@ -76,6 +78,8 @@ def get_telemetry():
     telemetry = {
         'voltages': latest_telemetry_data.get('voltages', []),
         'currents': latest_telemetry_data.get('currents', []),
+        'frequency': latest_telemetry_data.get('frequency', []),
+        'power': latest_telemetry_data.get('power', []),  # Added power
         'timestamp': latest_telemetry_data.get('timestamp'),
         'isConnected': True  # Assume connected if data is being served
     }
