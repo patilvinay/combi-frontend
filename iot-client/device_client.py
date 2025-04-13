@@ -16,12 +16,23 @@ logger = logging.getLogger(__name__)
 
 # Flask app setup
 app = Flask(__name__)
-CORS(app)
+# Update CORS to allow ngrok domain
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["https://7757-103-5-132-9.ngrok-free.app", "http://localhost:3000"],  # Replace with your ngrok URL
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"],
+        "expose_headers": ["Access-Control-Allow-Origin"],
+        "supports_credentials": True
+    }
+})
 
 # Global variable to store the latest telemetry data
 latest_telemetry_data = {
     'voltages': [],
     'currents': [],
+    'frequency': [],
+    'power': [],  # Added power
     'timestamp': None
 }
 
@@ -76,6 +87,8 @@ def get_telemetry():
     telemetry = {
         'voltages': latest_telemetry_data.get('voltages', []),
         'currents': latest_telemetry_data.get('currents', []),
+        'frequency': latest_telemetry_data.get('frequency', []),
+        'power': latest_telemetry_data.get('power', []),  # Added power
         'timestamp': latest_telemetry_data.get('timestamp'),
         'isConnected': True  # Assume connected if data is being served
     }
@@ -127,3 +140,5 @@ if __name__ == "__main__":
 
     # Run the main async loop
     asyncio.run(main())
+
+
