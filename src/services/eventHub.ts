@@ -1,6 +1,8 @@
 interface TelemetryData {
   voltages: number[];
   currents: number[];
+  frequency: number[];
+  power: number[];
   isConnected: boolean;
   timestamp?: string;
 }
@@ -20,6 +22,8 @@ class EventHubService {
     callback({
       voltages: [],
       currents: [],
+      frequency: [],
+      power: [],
       isConnected: false
     });
 
@@ -35,6 +39,8 @@ class EventHubService {
         callback({
           voltages: data.voltages || [],
           currents: data.currents || [],
+          frequency: data.frequency || [],
+          power: data.power || [],
           isConnected: data.isConnected,
           timestamp: data.timestamp
         });
@@ -43,6 +49,8 @@ class EventHubService {
         callback({
           voltages: [],
           currents: [],
+          frequency: [],
+          power: [],
           isConnected: false
         });
       }

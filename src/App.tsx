@@ -35,6 +35,8 @@ const darkTheme = createTheme({
 interface TelemetryData {
   voltages: number[];
   currents: number[];
+  frequency: number[];
+  power: number[];
   isConnected: boolean;
 }
 
@@ -42,6 +44,8 @@ function App() {
   const [telemetryData, setTelemetryData] = useState<TelemetryData>({
     voltages: [],
     currents: [],
+    frequency: [],
+    power: [],
     isConnected: false
   });
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +111,7 @@ function App() {
         </Typography>
         
         <Grid container spacing={3}>
-          {[...Array(6)].map((_, index) => (
+          {[...Array(8)].map((_, index) => (
             <Grid item xs={12} sm={6} md={4} key={index}>
               <Paper
                 sx={{
@@ -126,42 +130,79 @@ function App() {
                   borderBottom: '1px solid rgba(144, 202, 249, 0.2)', 
                   pb: 1
                 }}>
-                  Channel {index + 1}
+                  {index === 7 ? 'Frequency' : `Channel ${index + 1}`}
                 </Typography>
                 
                 <Grid container spacing={2} sx={{ mt: 1 }}>
-                  <Grid item xs={6}>
-                    <Typography variant="body2" color="text.secondary">
-                      Voltage
-                    </Typography>
-                    <Typography variant="h4" sx={{ 
-                      color: '#8884d8', 
-                      fontWeight: 'bold',
-                      opacity: telemetryData.isConnected ? 1 : 0.7 
-                    }}>
-                      {telemetryData.isConnected ? 
-                        (telemetryData.voltages[index]?.toFixed(1) || '0.0') : 
-                        '--'
-                      }
-                      <Typography component="span" variant="h6" sx={{ ml: 1, opacity: 0.8 }}>V</Typography>
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Typography variant="body2" color="text.secondary">
-                      Current
-                    </Typography>
-                    <Typography variant="h4" sx={{ 
-                      color: '#82ca9d', 
-                      fontWeight: 'bold',
-                      opacity: telemetryData.isConnected ? 1 : 0.7
-                    }}>
-                      {telemetryData.isConnected ? 
-                        (telemetryData.currents[index]?.toFixed(1) || '0.0') : 
-                        '--'
-                      }
-                      <Typography component="span" variant="h6" sx={{ ml: 1, opacity: 0.8 }}>A</Typography>
-                    </Typography>
-                  </Grid>
+                  {index !== 7 ? (
+                    <>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">
+                          Voltage
+                        </Typography>
+                        <Typography variant="h4" sx={{ 
+                          color: '#8884d8', 
+                          fontWeight: 'bold',
+                          opacity: telemetryData.isConnected ? 1 : 0.7 
+                        }}>
+                          {telemetryData.isConnected ? 
+                            (telemetryData.voltages[index]?.toFixed(1) || '0.0') : 
+                            '--'
+                          }
+                          <Typography component="span" variant="h6" sx={{ ml: 1, opacity: 0.8 }}>V</Typography>
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">
+                          Current
+                        </Typography>
+                        <Typography variant="h4" sx={{ 
+                          color: '#82ca9d', 
+                          fontWeight: 'bold',
+                          opacity: telemetryData.isConnected ? 1 : 0.7
+                        }}>
+                          {telemetryData.isConnected ? 
+                            (telemetryData.currents[index]?.toFixed(1) || '0.0') : 
+                            '--'
+                          }
+                          <Typography component="span" variant="h6" sx={{ ml: 1, opacity: 0.8 }}>A</Typography>
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">
+                          Power
+                        </Typography>
+                        <Typography variant="h4" sx={{ 
+                          color: '#ff7300', 
+                          fontWeight: 'bold',
+                          opacity: telemetryData.isConnected ? 1 : 0.7 
+                        }}>
+                          {telemetryData.isConnected ? 
+                            (telemetryData.power[index]?.toFixed(2) || '0.00') : 
+                            '0.00'
+                          }
+                          <Typography component="span" variant="h6" sx={{ ml: 1, opacity: 0.8 }}>W</Typography>
+                        </Typography>
+                      </Grid>
+                    </>
+                  ) : (
+                    <Grid item xs={12}>
+                      <Typography variant="body2" color="text.secondary">
+                        Frequency
+                      </Typography>
+                      <Typography variant="h4" sx={{ 
+                        color: '#ff7300', 
+                        fontWeight: 'bold',
+                        opacity: telemetryData.isConnected ? 1 : 0.7 
+                      }}>
+                        {telemetryData.isConnected ? 
+                          (telemetryData.frequency[0]?.toFixed(1) || '0.0') : 
+                          '--'
+                        }
+                        <Typography component="span" variant="h6" sx={{ ml: 1, opacity: 0.8 }}>Hz</Typography>
+                      </Typography>
+                    </Grid>
+                  )}
                 </Grid>
               </Paper>
             </Grid>

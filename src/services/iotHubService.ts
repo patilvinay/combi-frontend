@@ -3,6 +3,8 @@ import { EventHubConsumerClient } from '@azure/event-hubs';
 interface TelemetryData {
   voltages: number[];
   currents: number[];
+  frequency: number[];
+  power: number[];
 }
 
 class IoTHubService {
@@ -33,6 +35,8 @@ class IoTHubService {
     return new Promise((resolve, reject) => {
       const voltages: number[] = [];
       const currents: number[] = [];
+      const frequency: number[] = [];
+      const power: number[] = [];
 
       try {
         this.client?.subscribe({
@@ -45,6 +49,12 @@ class IoTHubService {
               if (telemetry.current !== undefined) {
                 currents.push(telemetry.current);
               }
+              if (telemetry.frequency !== undefined) {
+                frequency.push(telemetry.frequency);
+              }
+              if (telemetry.power !== undefined) {
+                power.push(telemetry.power);
+              }
             }
             await context.updateCheckpoint(events[events.length - 1]);
           },
@@ -56,7 +66,7 @@ class IoTHubService {
 
         // Resolve after collecting some data or timeout
         setTimeout(() => {
-          resolve({ voltages, currents });
+          resolve({ voltages, currents, frequency, power });
         }, 5000);
       } catch (error) {
         reject(error);
