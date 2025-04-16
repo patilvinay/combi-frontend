@@ -63,6 +63,9 @@ last_queried = {}
 # Inactivity timeout in seconds (default: 1 hour)
 INACTIVITY_TIMEOUT = int(os.getenv('INACTIVITY_TIMEOUT', 3600))
 
+# Data staleness timeout in seconds (default: 5 minutes)
+DATA_STALENESS_TIMEOUT = int(os.getenv('DATA_STALENESS_TIMEOUT', 300))
+
 # API key for authentication (default: a secure 20-digit alphanumeric key)
 API_KEY = os.getenv('API_KEY', 'Xj7Bq9Lp2Rt5Zk8Mn3Vx6Hs1')
 
@@ -135,6 +138,33 @@ async def process_event(partition_context, event):
     except Exception as e:
         logger.error(f"Error processing event: {e}")
 
+def is_data_stale(timestamp_str):
+    """Check if data is stale based on timestamp"""
+    if not timestamp_str:
+        return True
+
+    try:
+        # Parse the timestamp
+        if '+' in timestamp_str or 'Z' in timestamp_str:
+            # Timestamp has timezone info
+            timestamp = datetime.datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+        else:
+            # Timestamp doesn't have timezone info, assume UTC
+            timestamp = datetime.datetime.fromisoformat(timestamp_str)
+            timestamp = timestamp.replace(tzinfo=datetime.timezone.utc)
+
+        # Get current time in UTC
+        now = datetime.datetime.now(datetime.timezone.utc)
+
+        # Calculate time difference in seconds
+        time_diff = (now - timestamp).total_seconds()
+
+        # Return True if data is older than DATA_STALENESS_TIMEOUT
+        return time_diff > DATA_STALENESS_TIMEOUT
+    except Exception as e:
+        logger.error(f"Error checking data staleness: {e}")
+        return True  # Assume data is stale if we can't parse the timestamp
+
 @app.route('/api/telemetry')
 @require_api_key
 def get_telemetry():
@@ -154,14 +184,18 @@ def get_telemetry():
         # Generate mock data for testing
         import random
 
-        # Generate 6 random voltage and current values
-        voltages = [round(random.uniform(220, 240), 1) for _ in range(6)]
-        currents = [round(random.uniform(0.5, 5.0), 1) for _ in range(6)]
+        # Generate 7 random voltage and current values
+        voltages = [round(random.uniform(220, 240), 1) for _ in range(7)]
+        currents = [round(random.uniform(0.5, 5.0), 1) for _ in range(7)]
+        power = [round(voltages[i] * currents[i], 1) for i in range(7)]
+        frequency = [round(random.uniform(49.5, 50.5), 1)]
 
         telemetry = {
             'deviceId': device_id,
             'voltages': voltages,
             'currents': currents,
+            'power': power,
+            'frequency': frequency,
             'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'isConnected': True
         }
@@ -169,19 +203,48 @@ def get_telemetry():
         # Use real data from Azure IoT Hub for the specified device
         if device_id in device_telemetry:
             device_data = device_telemetry[device_id]
-            telemetry = {
-                'deviceId': device_id,
-                'voltages': device_data.get('voltages', []),
-                'currents': device_data.get('currents', []),
-                'timestamp': device_data.get('timestamp'),
-                'isConnected': device_data.get('isConnected', False)
-            }
+
+            # Get the timestamp
+            timestamp = device_data.get('timestamp')
+
+            # Check if data is stale
+            if is_data_stale(timestamp):
+                logger.info(f"Data for device {device_id} is stale (older than {DATA_STALENESS_TIMEOUT} seconds), flushing data")
+                # If data is stale, mark device as disconnected and flush the data
+                telemetry = {
+                    'deviceId': device_id,
+                    'voltages': [],  # Flush stale data
+                    'currents': [],  # Flush stale data
+                    'power': [],      # Flush stale data
+                    'frequency': [],  # Flush stale data
+                    'timestamp': timestamp,
+                    'isConnected': False,
+                    'isStale': True,
+                    'message': f'Data is stale (older than {DATA_STALENESS_TIMEOUT} seconds)'
+                }
+            else:
+                # Data is fresh, include all fields
+                telemetry = {
+                    'deviceId': device_id,
+                    'voltages': device_data.get('voltages', []),
+                    'currents': device_data.get('currents', []),
+                    'timestamp': timestamp,
+                    'isConnected': device_data.get('isConnected', False)
+                }
+
+                # Add additional fields if they exist in the telemetry data
+                if 'frequency' in device_data:
+                    telemetry['frequency'] = device_data.get('frequency', [])
+                if 'power' in device_data:
+                    telemetry['power'] = device_data.get('power', [])
         else:
             # Device not found, return empty data
             telemetry = {
                 'deviceId': device_id,
                 'voltages': [],
                 'currents': [],
+                'power': [],
+                'frequency': [],
                 'timestamp': None,
                 'isConnected': False,
                 'message': 'Device not registered or no data available'
@@ -233,6 +296,8 @@ def register_device():
         device_telemetry[device_id] = {
             'voltages': [],
             'currents': [],
+            'power': [],
+            'frequency': [],
             'timestamp': None,
             'isConnected': False
         }
@@ -410,6 +475,8 @@ async def main():
             device_telemetry[DEFAULT_DEVICE_ID] = {
                 'voltages': [],
                 'currents': [],
+                'power': [],
+                'frequency': [],
                 'timestamp': None,
                 'isConnected': False
             }
