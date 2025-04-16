@@ -1,0 +1,149 @@
+{
+  "info": {
+    "name": "IoT Client API",
+    "description": "Collection of requests for testing the IoT Client REST API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Device Management",
+      "item": [
+        {
+          "name": "List all devices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/devices",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "devices"
+              ]
+            },
+            "description": "Returns a list of all registered devices and their status."
+          },
+          "response": []
+        },
+        {
+          "name": "Register device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"test-device-1\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/register-device",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "register-device"
+              ]
+            },
+            "description": "Registers a new device with the specified device ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Unregister device",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/unregister-device/test-device-1",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "unregister-device",
+                "test-device-1"
+              ]
+            },
+            "description": "Unregisters a device with the specified device ID."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints for managing devices"
+    },
+    {
+      "name": "Telemetry",
+      "item": [
+        {
+          "name": "Get telemetry (specific device)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/telemetry?deviceId=test-device-1",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "telemetry"
+              ],
+              "query": [
+                {
+                  "key": "deviceId",
+                  "value": "test-device-1"
+                }
+              ]
+            },
+            "description": "Returns telemetry data for the specified device."
+          },
+          "response": []
+        },
+        {
+          "name": "Get telemetry (default device)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/telemetry",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "telemetry"
+              ]
+            },
+            "description": "Returns telemetry data for the default device."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints for retrieving telemetry data"
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000"
+    }
+  ]
+}

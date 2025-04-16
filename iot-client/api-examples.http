@@ -1,0 +1,61 @@
+###
+# IoT Client REST API Examples
+# This file can be used with REST Client extensions in editors like VS Code
+# or with other HTTP client tools to test the API endpoints.
+###
+
+@baseUrl = http://localhost:5000
+@deviceId = mydevice1
+@apiKey = Xj7Bq9Lp2Rt5Zk8Mn3Vx6Hs1
+
+### List all registered devices
+GET {{baseUrl}}/api/devices
+Accept: application/json
+X-API-Key: {{apiKey}}
+
+### Register a new device
+POST {{baseUrl}}/api/register-device
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "deviceId": "{{deviceId}}"
+}
+
+### Get telemetry for a specific device
+GET {{baseUrl}}/api/telemetry?deviceId={{deviceId}}
+Accept: application/json
+X-API-Key: {{apiKey}}
+
+### Get telemetry for the default device (if set)
+GET {{baseUrl}}/api/telemetry
+Accept: application/json
+X-API-Key: {{apiKey}}
+
+### Unregister a device
+DELETE {{baseUrl}}/api/unregister-device/{{deviceId}}
+Accept: application/json
+X-API-Key: {{apiKey}}
+
+### Examples with different device IDs
+
+@anotherDevice = device-1
+
+### Register another device
+POST {{baseUrl}}/api/register-device
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "deviceId": "{{anotherDevice}}"
+}
+
+### Get telemetry for another device
+GET {{baseUrl}}/api/telemetry?deviceId={{anotherDevice}}
+Accept: application/json
+X-API-Key: {{apiKey}}
+
+### Unregister another device
+DELETE {{baseUrl}}/api/unregister-device/{{anotherDevice}}
+Accept: application/json
+X-API-Key: {{apiKey}}

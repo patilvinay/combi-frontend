@@ -1,0 +1,116 @@
+# IoT Client REST API Tests
+# This file contains examples of API requests for testing the IoT client REST API.
+# It can be used with REST Client extensions in editors like VS Code or with other HTTP client tools.
+
+# Base URL for the API
+@baseUrl = http://localhost:5000
+
+# API key for authentication
+@apiKey = Xj7Bq9Lp2Rt5Zk8Mn3Vx6Hs1
+
+# Test device IDs
+@device1 = test-device-1
+@device2 = test-device-2
+@device3 = test-device-3
+
+###############################################################################
+# Device Management
+###############################################################################
+
+### List all registered devices
+# This endpoint returns a list of all registered devices and their status.
+GET {{baseUrl}}/api/devices
+Accept: application/json
+X-API-Key: {{apiKey}}
+
+### Register a new device (Device 1)
+# This endpoint registers a new device with the specified device ID.
+# The response includes the device ID, status, and a message.
+POST {{baseUrl}}/api/register-device
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "deviceId": "{{device1}}"
+}
+
+### Register another device (Device 2)
+POST {{baseUrl}}/api/register-device
+Content-Type: application/json
+
+{
+  "deviceId": "{{device2}}"
+}
+
+### Register a third device (Device 3)
+POST {{baseUrl}}/api/register-device
+Content-Type: application/json
+
+{
+  "deviceId": "{{device3}}"
+}
+
+### Try to register a device that already exists
+# This should return a status of "already_registered".
+POST {{baseUrl}}/api/register-device
+Content-Type: application/json
+
+{
+  "deviceId": "{{device1}}"
+}
+
+### Unregister a device
+# This endpoint unregisters a device with the specified device ID.
+# The response includes the device ID, status, and a message.
+DELETE {{baseUrl}}/api/unregister-device/{{device1}}
+Accept: application/json
+
+### Try to unregister a device that doesn't exist
+# This should return a 404 error.
+DELETE {{baseUrl}}/api/unregister-device/nonexistent-device
+Accept: application/json
+
+###############################################################################
+# Telemetry Data
+###############################################################################
+
+### Get telemetry for a specific device
+# This endpoint returns telemetry data for the specified device.
+GET {{baseUrl}}/api/telemetry?deviceId={{device2}}
+Accept: application/json
+
+### Get telemetry for the default device (if set)
+# This endpoint returns telemetry data for the default device.
+# If no default device is set, it returns an error.
+GET {{baseUrl}}/api/telemetry
+Accept: application/json
+
+### Get telemetry for a device that doesn't exist
+# This should return empty telemetry data.
+GET {{baseUrl}}/api/telemetry?deviceId=nonexistent-device
+Accept: application/json
+
+###############################################################################
+# Workflow Examples
+###############################################################################
+
+### Example workflow: Register a device, get telemetry, then unregister
+# 1. Register a new device
+POST {{baseUrl}}/api/register-device
+Content-Type: application/json
+
+{
+  "deviceId": "workflow-test-device"
+}
+
+### 2. Get telemetry for the device
+GET {{baseUrl}}/api/telemetry?deviceId=workflow-test-device
+Accept: application/json
+
+### 3. Unregister the device
+DELETE {{baseUrl}}/api/unregister-device/workflow-test-device
+Accept: application/json
+
+### 4. Verify the device is no longer registered
+GET {{baseUrl}}/api/devices
+Accept: application/json
