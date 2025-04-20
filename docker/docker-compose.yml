@@ -1,0 +1,35 @@
+version: '3'
+
+services:
+  iot-client:
+    image: iot-client
+    build: ./iot-client
+    container_name: iot-container
+    restart: always
+    environment:
+      - EVENTHUB_CONNECTION_STRING=${EVENTHUB_CONNECTION_STRING}
+      - CONSUMER_GROUP=${CONSUMER_GROUP}
+      - DEVICE_ID=${DEVICE_ID}
+      - API_KEY=${API_KEY}
+    networks:
+      - app-network
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx-proxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./iot-client/nginx/conf.d:/etc/nginx/conf.d
+      - ./iot-client/nginx/ssl:/etc/nginx/ssl
+      - ./iot-client/nginx/www:/var/www/html
+    depends_on:
+      - iot-client
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
