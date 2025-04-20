@@ -6,16 +6,11 @@ services:
     build: ./iot-client
     container_name: iot-container
     restart: always
-    ports:
-      - "5000:5000"
     environment:
-      - EVENTHUB_CONNECTION_STRING=Endpoint=sb://iothub-ns-my-iot-hub-64462241-269f6eda4d.servicebus.windows.net/;SharedAccessKeyName=service;SharedAccessKey=MkA4ElETbP6L7qBEvtR3ugiC5BXHpw3M+AIoTCUSARM=;EntityPath=my-iot-hub-456
-      - CONSUMER_GROUP=$Default
-      - DEVICE_ID=48:CA:43:36:71:04
-      - API_KEY=Xj7Bq9Lp2Rt5Zk8Mn3Vx6Hs1
-      - USE_MOCK_DATA=false
-      - DATA_STALENESS_TIMEOUT=300
-      - FLASK_ENV=development
+      - EVENTHUB_CONNECTION_STRING=${EVENTHUB_CONNECTION_STRING}
+      - CONSUMER_GROUP=${CONSUMER_GROUP}
+      - DEVICE_ID=${DEVICE_ID}
+      - API_KEY=${API_KEY}
     networks:
       - app-network
 

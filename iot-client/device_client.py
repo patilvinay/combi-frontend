@@ -84,8 +84,7 @@ def validate_connection_string(conn_string: str) -> bool:
 def load_env_variables():
     load_dotenv()
     required_vars = [
-        'EVENTHUB_CONNECTION_STRING',
-        'CONSUMER_GROUP'
+        'EVENTHUB_CONNECTION_STRING'
     ]
 
     env_vars = {var: os.getenv(var) for var in required_vars}
@@ -98,6 +97,9 @@ def load_env_variables():
     if not validate_connection_string(env_vars['EVENTHUB_CONNECTION_STRING']):
         raise ValueError("Invalid Event Hub connection string format")
 
+    # Hard-code the consumer group value
+    env_vars['CONSUMER_GROUP'] = '$Default'
+
     return env_vars
 
 async def create_eventhub_client(device_id):
@@ -105,9 +107,19 @@ async def create_eventhub_client(device_id):
     try:
         env_vars = load_env_variables()
 
+        # Log connection details for debugging
+        conn_string = env_vars['EVENTHUB_CONNECTION_STRING']
+        # Extract and log the endpoint URL
+        endpoint = next((part.split('=', 1)[1] for part in conn_string.split(';') if part.startswith('Endpoint=')), 'Unknown')
+        entity_path = next((part.split('=', 1)[1] for part in conn_string.split(';') if part.startswith('EntityPath=')), 'Unknown')
+
+        logger.info(f"Connecting to EventHub with endpoint: {endpoint}")
+        logger.info(f"Using EntityPath: {entity_path}")
+        logger.info(f"Using consumer group: {env_vars['CONSUMER_GROUP']}")
+
         # Create EventHub client with custom consumer group
         client = EventHubConsumerClient.from_connection_string(
-            env_vars['EVENTHUB_CONNECTION_STRING'],
+            conn_string,
             consumer_group=env_vars['CONSUMER_GROUP']
         )
 
@@ -115,6 +127,10 @@ async def create_eventhub_client(device_id):
         return client
     except Exception as e:
         logger.error(f"Error creating EventHub client for device {device_id}: {e}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        logger.error(f"Exception details: {str(e)}")
+        if hasattr(e, '__cause__') and e.__cause__:
+            logger.error(f"Caused by: {e.__cause__}")
         raise
 
 async def process_event(partition_context, event):
@@ -321,6 +337,9 @@ async def start_device_monitoring(device_id):
             registered_devices[device_id]['status'] = 'registered'
             return
 
+        logger.info(f"Starting real-time monitoring for device {device_id}")
+        logger.info(f"Creating EventHub client for device {device_id}")
+
         # Create EventHub client for this device
         client = await create_eventhub_client(device_id)
 
@@ -329,25 +348,38 @@ async def start_device_monitoring(device_id):
 
         # Update device status
         registered_devices[device_id]['status'] = 'registered'
+        logger.info(f"Device {device_id} registered successfully")
 
         # Start receiving events
         async def receive_events():
             try:
+                logger.info(f"Starting to receive events for device {device_id}")
                 async with client:
+                    logger.info(f"Client context established for device {device_id}")
+                    logger.info(f"Calling client.receive() for device {device_id}")
                     await client.receive(
                         on_event=process_event,
                         starting_position="-1"  # Start from end of stream
                     )
             except Exception as e:
                 logger.error(f"Error receiving events for device {device_id}: {e}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                logger.error(f"Exception details: {str(e)}")
+                if hasattr(e, '__cause__') and e.__cause__:
+                    logger.error(f"Caused by: {e.__cause__}")
                 registered_devices[device_id]['status'] = 'error'
 
         # Start the receive task in the background
+        logger.info(f"Creating background task for device {device_id}")
         asyncio.create_task(receive_events())
 
         logger.info(f"Started monitoring for device: {device_id}")
     except Exception as e:
         logger.error(f"Error starting monitoring for device {device_id}: {e}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        logger.error(f"Exception details: {str(e)}")
+        if hasattr(e, '__cause__') and e.__cause__:
+            logger.error(f"Caused by: {e.__cause__}")
         registered_devices[device_id]['status'] = 'error'
 
 async def stop_device_monitoring(device_id):
