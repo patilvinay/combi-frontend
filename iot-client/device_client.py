@@ -3,6 +3,8 @@ import json
 import os
 import logging
 import datetime
+import time
+import sys
 from dotenv import load_dotenv
 from azure.eventhub.aio import EventHubConsumerClient
 from flask import Flask, jsonify, request
@@ -60,6 +62,9 @@ device_clients = {}
 # Dictionary to track when each device was last queried
 last_queried = {}
 
+# Dictionary to store background tasks for each device
+device_tasks = {}
+
 # Inactivity timeout in seconds (default: 1 hour)
 INACTIVITY_TIMEOUT = int(os.getenv('INACTIVITY_TIMEOUT', 3600))
 
@@ -71,6 +76,9 @@ API_KEY = os.getenv('API_KEY', 'Xj7Bq9Lp2Rt5Zk8Mn3Vx6Hs1')
 
 # Flag to use mock data
 USE_MOCK_DATA = os.getenv('USE_MOCK_DATA', 'false').lower() == 'true'
+
+# Add this constant at the top with other constants
+DEVICE_OFFLINE_TIMEOUT = 10  # seconds to wait before considering device offline
 
 def validate_connection_string(conn_string: str) -> bool:
     """Validate connection string format"""
@@ -147,9 +155,14 @@ async def process_event(partition_context, event):
             if device_id not in device_telemetry:
                 device_telemetry[device_id] = {}
 
-            device_telemetry[device_id] = telemetry_data
-            device_telemetry[device_id]['timestamp'] = str(datetime.datetime.now(datetime.timezone.utc))
-            device_telemetry[device_id]['isConnected'] = True
+            # Update the data with current timestamp and connection status
+            current_time = time.time()
+            device_telemetry[device_id] = {
+                **telemetry_data,
+                'timestamp': str(datetime.datetime.now(datetime.timezone.utc)),
+                'isConnected': True,
+                'last_data_received': current_time
+            }
 
     except Exception as e:
         logger.error(f"Error processing event: {e}")
@@ -219,54 +232,49 @@ def get_telemetry():
         # Use real data from Azure IoT Hub for the specified device
         if device_id in device_telemetry:
             device_data = device_telemetry[device_id]
+            current_time = time.time()
+            last_data_received = device_data.get('last_data_received', 0)
+            
+            # Check if device is offline based on last data received
+            time_since_last_data = current_time - last_data_received
+            is_device_offline = time_since_last_data > DEVICE_OFFLINE_TIMEOUT
 
-            # Get the timestamp
-            timestamp = device_data.get('timestamp')
-
-            # Check if data is stale
-            if is_data_stale(timestamp):
-                logger.info(f"Data for device {device_id} is stale (older than {DATA_STALENESS_TIMEOUT} seconds), flushing data")
-                # If data is stale, mark device as disconnected and flush the data
-                telemetry = {
+            # Always return empty data when device is offline
+            if is_device_offline:
+                return jsonify({
                     'deviceId': device_id,
-                    'voltages': [],  # Flush stale data
-                    'currents': [],  # Flush stale data
-                    'power': [],      # Flush stale data
-                    'frequency': [],  # Flush stale data
-                    'timestamp': timestamp,
+                    'voltages': [],
+                    'currents': [],
+                    'power': [],
+                    'frequency': [],
+                    'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     'isConnected': False,
-                    'isStale': True,
-                    'message': f'Data is stale (older than {DATA_STALENESS_TIMEOUT} seconds)'
-                }
-            else:
-                # Data is fresh, include all fields
-                telemetry = {
-                    'deviceId': device_id,
-                    'voltages': device_data.get('voltages', []),
-                    'currents': device_data.get('currents', []),
-                    'timestamp': timestamp,
-                    'isConnected': device_data.get('isConnected', False)
-                }
+                    'message': f'Device offline for {int(time_since_last_data)} seconds'
+                })
 
-                # Add additional fields if they exist in the telemetry data
-                if 'frequency' in device_data:
-                    telemetry['frequency'] = device_data.get('frequency', [])
-                if 'power' in device_data:
-                    telemetry['power'] = device_data.get('power', [])
+            # Only return data if device is online
+            telemetry = {
+                'deviceId': device_id,
+                'voltages': device_data.get('voltages', []),
+                'currents': device_data.get('currents', []),
+                'power': device_data.get('power', []),
+                'frequency': device_data.get('frequency', []),
+                'timestamp': device_data.get('timestamp'),
+                'isConnected': True
+            }
         else:
-            # Device not found, return empty data
+            # Device not found or never connected
             telemetry = {
                 'deviceId': device_id,
                 'voltages': [],
                 'currents': [],
                 'power': [],
                 'frequency': [],
-                'timestamp': None,
+                'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 'isConnected': False,
                 'message': 'Device not registered or no data available'
             }
 
-    logger.info(f"Sending telemetry data for device {device_id}: {telemetry}")
     return jsonify(telemetry)
 
 @app.route('/api/register-device', methods=['POST'])
@@ -332,10 +340,10 @@ def register_device():
 async def start_device_monitoring(device_id):
     """Start monitoring telemetry for a specific device"""
     try:
-        if USE_MOCK_DATA:
-            logger.info(f"Mock mode: Not creating real EventHub client for device {device_id}")
-            registered_devices[device_id]['status'] = 'registered'
-            return
+        # Check if device_id is valid
+        if device_id not in registered_devices:
+            logger.error(f"Attempted to monitor unregistered device: {device_id}")
+            return False
 
         logger.info(f"Starting real-time monitoring for device {device_id}")
         logger.info(f"Creating EventHub client for device {device_id}")
@@ -367,20 +375,24 @@ async def start_device_monitoring(device_id):
                 logger.error(f"Exception details: {str(e)}")
                 if hasattr(e, '__cause__') and e.__cause__:
                     logger.error(f"Caused by: {e.__cause__}")
-                registered_devices[device_id]['status'] = 'error'
+                if device_id in registered_devices:
+                    registered_devices[device_id]['status'] = 'error'
 
-        # Start the receive task in the background
+        # Create background task
         logger.info(f"Creating background task for device {device_id}")
-        asyncio.create_task(receive_events())
+        task = asyncio.create_task(receive_events())
+        device_tasks[device_id] = task
 
         logger.info(f"Started monitoring for device: {device_id}")
+        return True
+
     except Exception as e:
         logger.error(f"Error starting monitoring for device {device_id}: {e}")
         logger.error(f"Exception type: {type(e).__name__}")
         logger.error(f"Exception details: {str(e)}")
         if hasattr(e, '__cause__') and e.__cause__:
             logger.error(f"Caused by: {e.__cause__}")
-        registered_devices[device_id]['status'] = 'error'
+        return False
 
 async def stop_device_monitoring(device_id):
     """Stop monitoring telemetry for a specific device"""
@@ -492,59 +504,123 @@ def unregister_device(device_id):
         'message': 'Device unregistered successfully'
     })
 
-async def main():
-    logger.info("IoT Hub Telemetry Monitor Starting...")
-
-    # Initialize default device ID from environment variable
-    global DEFAULT_DEVICE_ID
-    DEFAULT_DEVICE_ID = os.getenv('DEVICE_ID')
-
-    if DEFAULT_DEVICE_ID:
-        logger.info(f"Default device ID set to: {DEFAULT_DEVICE_ID}")
-
-        # Initialize empty telemetry data for the default device
-        if DEFAULT_DEVICE_ID not in device_telemetry:
-            device_telemetry[DEFAULT_DEVICE_ID] = {
-                'voltages': [],
-                'currents': [],
-                'power': [],
-                'frequency': [],
-                'timestamp': None,
-                'isConnected': False
-            }
-
-        # Register the default device
-        registered_devices[DEFAULT_DEVICE_ID] = {
-            'registeredAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            'lastSeen': None,
-            'status': 'registering'
-        }
-
-        # Start monitoring for the default device
-        await start_device_monitoring(DEFAULT_DEVICE_ID)
-
-    # Keep the application running
+async def check_connection_status():
+    """Check connection status for all devices and attempt reconnection if needed"""
     while True:
         try:
-            # Sleep to keep the async loop running
-            await asyncio.sleep(60)
+            await asyncio.sleep(60)  # Check every minute
+            current_time = time.time()
+            
+            for device_id in list(device_telemetry.keys()):  # Create a copy of keys to iterate
+                if device_id not in registered_devices:
+                    logger.warning(f"Removing unregistered device from telemetry: {device_id}")
+                    device_telemetry.pop(device_id, None)
+                    continue
 
-            # Update lastSeen for connected devices
-            for device_id in list(device_telemetry.keys()):
-                if device_telemetry[device_id].get('isConnected', False):
-                    if device_id in registered_devices:
-                        registered_devices[device_id]['lastSeen'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-
-            # Check for inactive devices every 5 minutes
-            if int(datetime.datetime.now().timestamp()) % 300 < 60:  # Run every 5 minutes
-                logger.info("Checking for inactive devices...")
-                await check_inactive_devices()
-        except KeyboardInterrupt:
-            logger.info("\nStopping telemetry monitor...")
-            break
+                last_received = device_telemetry[device_id].get('last_data_received', 0)
+                time_diff = current_time - last_received
+                
+                if time_diff > DATA_STALENESS_TIMEOUT:
+                    logger.error(f"No data received for {time_diff} seconds. Attempting reconnection for device {device_id}")
+                    
+                    # Stop existing client
+                    if device_id in device_clients:
+                        await stop_device_monitoring(device_id)
+                    
+                    # Restart client connection
+                    success = await start_device_monitoring(device_id)
+                    if success:
+                        logger.info(f"Successfully reconnected device {device_id}")
+                    else:
+                        logger.error(f"Failed to reconnect device {device_id}")
+                        # Don't exit, just continue monitoring other devices
+                        
         except Exception as e:
-            logger.error(f"Error in main loop: {e}")
+            logger.error(f"Error in connection check: {e}")
             await asyncio.sleep(5)  # Wait a bit before retrying
+
+# Add this new function to periodically check device status
+async def check_device_status():
+    """Periodically check device status and update connection state"""
+    while True:
+        try:
+            current_time = time.time()
+            for device_id in device_telemetry:
+                last_received = device_telemetry[device_id].get('last_data_received', 0)
+                if current_time - last_received > DEVICE_OFFLINE_TIMEOUT:
+                    device_telemetry[device_id]['isConnected'] = False
+                    device_telemetry[device_id]['voltages'] = []
+                    device_telemetry[device_id]['currents'] = []
+                    device_telemetry[device_id]['power'] = []
+                    device_telemetry[device_id]['frequency'] = []
+            await asyncio.sleep(5)  # Check every 5 seconds
+        except Exception as e:
+            logger.error(f"Error in check_device_status: {e}")
+            await asyncio.sleep(5)
+
+async def main():
+    try:
+        # Start device status checker
+        asyncio.create_task(check_device_status())
+        
+        # Start connection checker
+        asyncio.create_task(check_connection_status())
+        
+        logger.info("IoT Hub Telemetry Monitor Starting...")
+
+        # Initialize default device ID from environment variable
+        global DEFAULT_DEVICE_ID
+        DEFAULT_DEVICE_ID = os.getenv('DEVICE_ID')
+
+        if DEFAULT_DEVICE_ID:
+            logger.info(f"Default device ID set to: {DEFAULT_DEVICE_ID}")
+
+            # Initialize empty telemetry data for the default device
+            if DEFAULT_DEVICE_ID not in device_telemetry:
+                device_telemetry[DEFAULT_DEVICE_ID] = {
+                    'voltages': [],
+                    'currents': [],
+                    'power': [],
+                    'frequency': [],
+                    'timestamp': None,
+                    'isConnected': False
+                }
+
+            # Register the default device
+            registered_devices[DEFAULT_DEVICE_ID] = {
+                'registeredAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                'lastSeen': None,
+                'status': 'registering'
+            }
+
+            # Start monitoring for the default device
+            await start_device_monitoring(DEFAULT_DEVICE_ID)
+
+        # Keep the application running
+        while True:
+            try:
+                await asyncio.sleep(60)
+                
+                # Update lastSeen for connected devices
+                for device_id in list(device_telemetry.keys()):
+                    if device_telemetry[device_id].get('isConnected', False):
+                        if device_id in registered_devices:
+                            registered_devices[device_id]['lastSeen'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+                # Check for inactive devices every 5 minutes
+                if int(datetime.datetime.now().timestamp()) % 300 < 60:
+                    logger.info("Checking for inactive devices...")
+                    await check_inactive_devices()
+                    
+            except Exception as e:
+                logger.error(f"Error in main loop: {e}")
+                await asyncio.sleep(5)
+                
+    except KeyboardInterrupt:
+        logger.info("\nStopping telemetry monitor...")
+    except Exception as e:
+        logger.error(f"Fatal error in main: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     # Run the Flask app in a separate thread
