@@ -148,6 +148,7 @@ async def process_event(partition_context, event):
         if device_id:
             device_id = device_id.decode()
             telemetry_data = json.loads(event.body_as_str())
+            # If telemetry_data does not contain 'power_factor', it won't be added to device_telemetry
             logger.info(f"Telemetry from {device_id}: {telemetry_data}")
 
             # Update telemetry data for this device
@@ -159,6 +160,7 @@ async def process_event(partition_context, event):
             current_time = time.time()
             device_telemetry[device_id] = {
                 **telemetry_data,
+                'power_factor': telemetry_data.get('power_factor', []),  # Add default
                 'timestamp': str(datetime.datetime.now(datetime.timezone.utc)),
                 'isConnected': True,
                 'last_data_received': current_time
@@ -218,6 +220,8 @@ def get_telemetry():
         currents = [round(random.uniform(0.5, 5.0), 1) for _ in range(7)]
         power = [round(voltages[i] * currents[i], 1) for i in range(7)]
         frequency = [round(random.uniform(49.5, 50.5), 1)]
+        power_factor = [round(random.uniform(0.9, 0.8), 1) for _ in range(7)]
+
 
         telemetry = {
             'deviceId': device_id,
@@ -225,6 +229,7 @@ def get_telemetry():
             'currents': currents,
             'power': power,
             'frequency': frequency,
+            'power_factor':power_factor,
             'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'isConnected': True
         }
@@ -232,14 +237,16 @@ def get_telemetry():
         # Use real data from Azure IoT Hub for the specified device
         if device_id in device_telemetry:
             device_data = device_telemetry[device_id]
+            logger.info(f"Device telemetry for {device_id}: {device_data}")
             current_time = time.time()
             last_data_received = device_data.get('last_data_received', 0)
             
             # Check if device is offline based on last data received
             time_since_last_data = current_time - last_data_received
             is_device_offline = time_since_last_data > DEVICE_OFFLINE_TIMEOUT
-
-            # Always return empty data when device is offline
+            
+            
+            # Fix this section for offline devices
             if is_device_offline:
                 return jsonify({
                     'deviceId': device_id,
@@ -247,6 +254,7 @@ def get_telemetry():
                     'currents': [],
                     'power': [],
                     'frequency': [],
+                    'power_factor': [],  # Fix the key name here
                     'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     'isConnected': False,
                     'message': f'Device offline for {int(time_since_last_data)} seconds'
@@ -259,6 +267,7 @@ def get_telemetry():
                 'currents': device_data.get('currents', []),
                 'power': device_data.get('power', []),
                 'frequency': device_data.get('frequency', []),
+                'power_factor': device_data.get('power_factor', []),
                 'timestamp': device_data.get('timestamp'),
                 'isConnected': True
             }
@@ -270,6 +279,7 @@ def get_telemetry():
                 'currents': [],
                 'power': [],
                 'frequency': [],
+                'power_factor': [],
                 'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 'isConnected': False,
                 'message': 'Device not registered or no data available'
@@ -322,6 +332,7 @@ def register_device():
             'currents': [],
             'power': [],
             'frequency': [],
+            'power_factor': [],
             'timestamp': None,
             'isConnected': False
         }
@@ -553,6 +564,7 @@ async def check_device_status():
                     device_telemetry[device_id]['currents'] = []
                     device_telemetry[device_id]['power'] = []
                     device_telemetry[device_id]['frequency'] = []
+                    device_telemetry[device_id]['power_factor'] = []
             await asyncio.sleep(5)  # Check every 5 seconds
         except Exception as e:
             logger.error(f"Error in check_device_status: {e}")
@@ -582,6 +594,7 @@ async def main():
                     'currents': [],
                     'power': [],
                     'frequency': [],
+                    'power_factor': [],
                     'timestamp': None,
                     'isConnected': False
                 }
