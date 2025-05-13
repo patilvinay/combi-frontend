@@ -74,9 +74,6 @@ DATA_STALENESS_TIMEOUT = int(os.getenv('DATA_STALENESS_TIMEOUT', 300))
 # API key for authentication (default: a secure 20-digit alphanumeric key)
 API_KEY = os.getenv('API_KEY', 'Xj7Bq9Lp2Rt5Zk8Mn3Vx6Hs1')
 
-# Flag to use mock data
-USE_MOCK_DATA = os.getenv('USE_MOCK_DATA', 'false').lower() == 'true'
-
 # Add this constant at the top with other constants
 DEVICE_OFFLINE_TIMEOUT = 10  # seconds to wait before considering device offline
 
@@ -211,69 +208,19 @@ def get_telemetry():
     # Update the last queried timestamp for this device
     last_queried[device_id] = datetime.datetime.now(datetime.timezone.utc)
 
-    if USE_MOCK_DATA:
-        # Generate mock data for testing
-        import random
+    # Use real data from Azure IoT Hub for the specified device
+    if device_id in device_telemetry:
+        device_data = device_telemetry[device_id]
+        logger.info(f"Device telemetry for {device_id}: {device_data}")
+        current_time = time.time()
+        last_data_received = device_data.get('last_data_received', 0)
 
-        # Generate 7 random voltage and current values
-        voltages = [round(random.uniform(220, 240), 1) for _ in range(7)]
-        currents = [round(random.uniform(0.5, 5.0), 1) for _ in range(7)]
-        power = [round(voltages[i] * currents[i], 1) for i in range(7)]
-        frequency = [round(random.uniform(49.5, 50.5), 1)]
-        power_factor = [round(random.uniform(0.9, 0.8), 1) for _ in range(7)]
+        # Check if device is offline based on last data received
+        time_since_last_data = current_time - last_data_received
+        is_device_offline = time_since_last_data > DEVICE_OFFLINE_TIMEOUT
 
-
-        telemetry = {
-            'deviceId': device_id,
-            'voltages': voltages,
-            'currents': currents,
-            'power': power,
-            'frequency': frequency,
-            'power_factor':power_factor,
-            'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            'isConnected': True
-        }
-    else:
-        # Use real data from Azure IoT Hub for the specified device
-        if device_id in device_telemetry:
-            device_data = device_telemetry[device_id]
-            logger.info(f"Device telemetry for {device_id}: {device_data}")
-            current_time = time.time()
-            last_data_received = device_data.get('last_data_received', 0)
-            
-            # Check if device is offline based on last data received
-            time_since_last_data = current_time - last_data_received
-            is_device_offline = time_since_last_data > DEVICE_OFFLINE_TIMEOUT
-            
-            
-            # Fix this section for offline devices
-            if is_device_offline:
-                return jsonify({
-                    'deviceId': device_id,
-                    'voltages': [],
-                    'currents': [],
-                    'power': [],
-                    'frequency': [],
-                    'power_factor': [],  # Fix the key name here
-                    'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    'isConnected': False,
-                    'message': f'Device offline for {int(time_since_last_data)} seconds'
-                })
-
-            # Only return data if device is online
-            telemetry = {
-                'deviceId': device_id,
-                'voltages': device_data.get('voltages', []),
-                'currents': device_data.get('currents', []),
-                'power': device_data.get('power', []),
-                'frequency': device_data.get('frequency', []),
-                'power_factor': device_data.get('power_factor', []),
-                'timestamp': device_data.get('timestamp'),
-                'isConnected': True
-            }
-        else:
-            # Device not found or never connected
-            telemetry = {
+        if is_device_offline:
+            return jsonify({
                 'deviceId': device_id,
                 'voltages': [],
                 'currents': [],
@@ -282,8 +229,33 @@ def get_telemetry():
                 'power_factor': [],
                 'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 'isConnected': False,
-                'message': 'Device not registered or no data available'
-            }
+                'message': f'Device offline for {int(time_since_last_data)} seconds'
+            })
+
+        # Only return data if device is online
+        telemetry = {
+            'deviceId': device_id,
+            'voltages': device_data.get('voltages', []),
+            'currents': device_data.get('currents', []),
+            'power': device_data.get('power', []),
+            'frequency': device_data.get('frequency', []),
+            'power_factor': device_data.get('power_factor', []),
+            'timestamp': device_data.get('timestamp'),
+            'isConnected': True
+        }
+    else:
+        # Device not found or never connected
+        telemetry = {
+            'deviceId': device_id,
+            'voltages': [],
+            'currents': [],
+            'power': [],
+            'frequency': [],
+            'power_factor': [],
+            'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'isConnected': False,
+            'message': 'Device not registered or no data available'
+        }
 
     return jsonify(telemetry)
 
@@ -325,21 +297,34 @@ def register_device():
     if DEFAULT_DEVICE_ID is None:
         DEFAULT_DEVICE_ID = device_id
 
-    # Initialize empty telemetry data for this device
-    if device_id not in device_telemetry:
-        device_telemetry[device_id] = {
-            'voltages': [],
-            'currents': [],
-            'power': [],
-            'frequency': [],
-            'power_factor': [],
-            'timestamp': None,
-            'isConnected': False
-        }
+    # Flush older data for the device
+    device_telemetry[device_id] = {
+        'voltages': [],
+        'currents': [],
+        'power': [],
+        'frequency': [],
+        'power_factor': [],
+        'timestamp': None,
+        'isConnected': False
+    }
 
-    # We can't use asyncio.create_task here because we're in a synchronous context
-    # Instead, we'll just mark the device as registered and let the main loop handle it
-    registered_devices[device_id]['status'] = 'registered'
+    # Start monitoring the device
+    asyncio.create_task(start_device_monitoring(device_id))
+
+    # Wait for a short period to verify if the device starts sending data
+    async def verify_device():
+        await asyncio.sleep(DEVICE_OFFLINE_TIMEOUT)  # Wait for the timeout period
+        if device_telemetry[device_id].get('last_data_received') is None:
+            # No data received, mark the device as disconnected
+            device_telemetry[device_id]['isConnected'] = False
+            registered_devices[device_id]['status'] = 'disconnected'
+            logger.warning(f"Device {device_id} did not send data within the timeout period. Marking as disconnected.")
+        else:
+            # Data received, mark the device as connected
+            registered_devices[device_id]['status'] = 'connected'
+            logger.info(f"Device {device_id} is actively sending data.")
+
+    asyncio.create_task(verify_device())
 
     logger.info(f"Device registration initiated: {device_id}")
     return jsonify({
