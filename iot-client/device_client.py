@@ -178,6 +178,7 @@ async def process_event(partition_context, event):
                     'last_data_received': current_time  # Initialize with current timestamp
                 }
 
+
             # Update only the relevant fields
             previous_last_data_received = device_telemetry[device_id].get('last_data_received', None)
             device_telemetry[device_id].update({
