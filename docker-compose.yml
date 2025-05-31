@@ -1,40 +1,97 @@
-version: '3'
+version: '3.8'
 
 services:
-  iot-client:
-    image: iot-client
-    build: ./iot-client
-    container_name: iot-container
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres-db
     restart: always
-    ports:
-      - "5000:5000"
     environment:
-      - EVENTHUB_CONNECTION_STRING=Endpoint=sb://iothub-ns-my-iot-hub-64462241-269f6eda4d.servicebus.windows.net/;SharedAccessKeyName=service;SharedAccessKey=MkA4ElETbP6L7qBEvtR3ugiC5BXHpw3M+AIoTCUSARM=;EntityPath=my-iot-hub-456
-      - CONSUMER_GROUP=$Default
-      - DEVICE_ID=48:CA:43:36:71:04
-      - API_KEY=Xj7Bq9Lp2Rt5Zk8Mn3Vx6Hs1
-      - USE_MOCK_DATA=false
-      - DATA_STALENESS_TIMEOUT=300
-      - FLASK_ENV=development
-    networks:
-      - app-network
-
-  nginx:
-    image: nginx:latest
-    container_name: nginx-proxy
-    restart: always
+      POSTGRES_DB: iotdb
+      POSTGRES_USER: iotuser
+      POSTGRES_PASSWORD: iotpassword
     ports:
-      - "80:80"
-      - "443:443"
+      - "5432:5432"
     volumes:
-      - ./iot-client/nginx/conf.d:/etc/nginx/conf.d
-      - ./iot-client/nginx/ssl:/etc/nginx/ssl
-      - ./iot-client/nginx/www:/var/www/html
-    depends_on:
-      - iot-client
+      - postgres_data:/var/lib/postgresql/data/
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iotuser -d iotdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # backend:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   container_name: iot-backend
+  #   restart: always
+  #   ports:
+  #     - "5050:5050"
+  #   environment:
+  #     - DATABASE_URL=postgresql://iotuser:iotpassword@postgres:5432/iotdb
+  #   volumes:
+  #     - ./backend/migrations:/app/migrations
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - app-network
+  #   command: >
+  #     sh -c "
+  #       echo 'Waiting for PostgreSQL to be ready...' &&
+  #       until PGPASSWORD=iotpassword psql -h postgres -U iotuser -d iotdb -c 'SELECT 1' > /dev/null 2>&1; do
+  #         echo 'PostgreSQL is not ready yet, retrying in 5 seconds...';
+  #         sleep 5;
+  #       done &&
+  #       echo 'Running database migrations...' &&
+  #       PGPASSWORD=iotpassword psql -h postgres -U iotuser -d iotdb -f /app/migrations/update_schema.sql &&
+  #       echo 'Starting FastAPI application...' &&
+  #       uvicorn app.main:app --host 0.0.0.0 --port 5050
+  #     "
+
+  # iot-client:
+  #   image: iot-client
+  #   build: ./iot-client
+  #   container_name: iot-container
+  #   restart: always
+  #   ports:
+  #     - "5000:5000"
+  #   environment:
+  #     - EVENTHUB_CONNECTION_STRING=Endpoint=sb://iothub-ns-my-iot-hub-64462241-269f6eda4d.servicebus.windows.net/;SharedAccessKeyName=service;SharedAccessKey=MkA4ElETbP6L7qBEvtR3ugiC5BXHpw3M+AIoTCUSARM=;EntityPath=my-iot-hub-456
+  #     - CONSUMER_GROUP=$Default
+  #     - DEVICE_ID=48:CA:43:36:71:04
+  #     - API_KEY=Xj7Bq9Lp2Rt5Zk8Mn3Vx6Hs1
+  #     - USE_MOCK_DATA=false
+  #     - DATA_STALENESS_TIMEOUT=300
+  #     - FLASK_ENV=development
+  #     - DATABASE_URL=postgresql://iotuser:iotpassword@postgres:5432/iotdb
+  #   depends_on:
+  #     - postgres
+  #   networks:
+  #     - app-network
+
+  # nginx:
+  #   image: nginx:latest
+  #   container_name: nginx-proxy
+  #   restart: always
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./iot-client/nginx/conf.d:/etc/nginx/conf.d
+  #     - ./iot-client/nginx/ssl:/etc/nginx/ssl
+  #     - ./iot-client/nginx/www:/var/www/html
+  #   depends_on:
+  #     - iot-client
+  #   networks:
+  #     - app-network
 
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  postgres_data:

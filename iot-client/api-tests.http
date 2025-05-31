@@ -9,7 +9,7 @@
 @apiKey = Xj7Bq9Lp2Rt5Zk8Mn3Vx6Hs1
 
 # Test device IDs
-@device1 = test-device-1
+@device1 = 48:CA:43:36:71:48
 @device2 = test-device-2
 @device3 = test-device-3
 
