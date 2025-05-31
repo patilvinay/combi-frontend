@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     
     # Security settings
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
+    API_KEY: str = "Xj7Bq9Lp2Rt5Zk8Mn3Vx6Hs1"  # User-provided API key
+    API_KEY_NAME: str = "X-API-Key"  # Header name for the API key
     
     class Config:
         case_sensitive = True

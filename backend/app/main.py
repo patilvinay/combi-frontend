@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -7,7 +7,9 @@ import logging
 import time
 
 from .api.api_v1.api import api_router
-from .db import get_db, init_db, engine
+from app.db import get_db
+from app.api.deps import get_api_key
+from .db import init_db, engine
 from .config import settings
 
 # Configure logging
@@ -17,15 +19,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI application
+# Initialize FastAPI application with docs and redoc always enabled
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="API for storing and retrieving time series data from IoT devices",
     version="1.0.0",
-    docs_url="/docs" if settings.DEBUG else None,
-    redoc_url="/redoc" if settings.DEBUG else None,
-    openapi_url="/openapi.json" if settings.DEBUG else None,
-    debug=settings.DEBUG
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
 )
 
 # CORS middleware configuration
@@ -56,12 +57,23 @@ async def root() -> Dict[str, str]:
     """Root endpoint that returns a welcome message."""
     return {"message": "Welcome to the IoT Time Series API"}
 
-@app.get("/health", status_code=status.HTTP_200_OK)
+@app.get(
+    "/health",
+    status_code=status.HTTP_200_OK,
+    summary="Health Check",
+    description="Check if the API and database are running. This endpoint is publicly accessible."
+)
 async def health_check(db: Session = Depends(get_db)) -> Dict[str, str]:
-    """Health check endpoint to verify the API and database are running."""
+    """
+    Health check endpoint to verify the API and database are running.
+    
+    Returns:
+        Dict with status and database connection status
+    """
     try:
-        # Test database connection
-        db.execute("SELECT 1")
+        # Test database connection with proper SQLAlchemy text()
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
         logger.error(f"Health check failed: {e}")

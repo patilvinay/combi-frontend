@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Security
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy.sql import text
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta, timezone
 
 from app import models
 from app.schemas import measurement as schemas
 from app.db import get_db
+from app.api.deps import get_api_key
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_api_key)])
 
 
 def map_phase_data(phase_num: int, phase: schemas.PhaseData) -> Dict[str, float]:
