@@ -1,29 +1,54 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security.api_key import APIKeyHeader
 from sqlalchemy.orm import Session
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import logging
+import logging.config
 import time
 
 from .api.api_v1.api import api_router
 from app.db import get_db
 from app.api.deps import get_api_key
 from .db import init_db, engine
-from .config import settings
+from .config import settings, get_settings
+
+# Create database tables
+# models.Base.metadata.create_all(bind=engine)
 
 # Configure logging
-logging.basicConfig(
-    level=logging.DEBUG if settings.DEBUG else logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.config.dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        },
+    },
+    "handlers": {
+        "console": {
+            "level": settings.LOG_LEVEL,
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
+    },
+    "loggers": {
+        "": {
+            "handlers": ["console"],
+            "level": settings.LOG_LEVEL,
+            "propagate": True,
+        },
+    },
+})
+
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI application with docs and redoc always enabled
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="API for storing and retrieving time series data from IoT devices",
-    version="1.0.0",
+    version=settings.VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json"
@@ -32,7 +57,7 @@ app = FastAPI(
 # CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=[str(origin) for origin in settings.CORS_ORIGINS],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

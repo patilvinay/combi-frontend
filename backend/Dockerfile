@@ -1,13 +1,18 @@
+# Build stage
 FROM python:3.9-slim as builder
 
-# Install build dependencies
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3-dev \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a virtual environment
+# Create and activate virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -20,6 +25,12 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # --- Runtime stage ---
 FROM python:3.9-slim
 
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH="/app" \
+    PATH="/opt/venv/bin:$PATH"
+
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
@@ -27,13 +38,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
 
 # Set working directory
 WORKDIR /app
 
 # Copy application code
 COPY . .
+
+# Make start script executable
+RUN chmod +x /app/start.sh
+
+# Expose port
+EXPOSE 5050
+
+# Command to run the application
+CMD ["/app/start.sh"]
 
 # Create a non-root user and switch to it
 RUN groupadd -r appuser && useradd -r -g appuser appuser \

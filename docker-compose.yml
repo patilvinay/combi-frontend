@@ -22,36 +22,51 @@ services:
       timeout: 5s
       retries: 5
 
-  # backend:
-  #   build:
-  #     context: ./backend
-  #     dockerfile: Dockerfile
-  #   container_name: iot-backend
-  #   restart: always
-  #   ports:
-  #     - "5050:5050"
-  #   environment:
-  #     - DATABASE_URL=postgresql://iotuser:iotpassword@postgres:5432/iotdb
-  #   volumes:
-  #     - ./backend/migrations:/app/migrations
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   networks:
-  #     - app-network
-  #   command: >
-  #     sh -c "
-  #       echo 'Waiting for PostgreSQL to be ready...' &&
-  #       until PGPASSWORD=iotpassword psql -h postgres -U iotuser -d iotdb -c 'SELECT 1' > /dev/null 2>&1; do
-  #         echo 'PostgreSQL is not ready yet, retrying in 5 seconds...';
-  #         sleep 5;
-  #       done &&
-  #       echo 'Running database migrations...' &&
-  #       PGPASSWORD=iotpassword psql -h postgres -U iotuser -d iotdb -f /app/migrations/update_schema.sql &&
-  #       echo 'Starting FastAPI application...' &&
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: iot-backend
+    restart: always
+    ports:
+      - "5050:5050"
+    environment:
+      - DATABASE_URL=postgresql://iotuser:iotpassword@postgres:5432/iotdb
+      - API_KEY=Xj7Bq9Lp2Rt5Zk8Mn3Vx6Hs1
+      - DEBUG=true
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+    command: ["/app/start.sh"]
   #       uvicorn app.main:app --host 0.0.0.0 --port 5050
   #     "
 
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: iot-frontend
+  #   restart: always
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - NODE_ENV=development
+  #     - REACT_APP_API_URL=http://localhost:5050/api/v1
+  #   volumes:
+  #     - ./frontend:/app
+  #     - /app/node_modules
+  #   depends_on:
+  #     - backend
+  #   networks:
+  #     - app-network
+  #   stdin_open: true
+  #   tty: true
+
+  # Uncomment and configure these services if needed in the future
   # iot-client:
   #   image: iot-client
   #   build: ./iot-client
@@ -60,7 +75,7 @@ services:
   #   ports:
   #     - "5000:5000"
   #   environment:
-  #     - EVENTHUB_CONNECTION_STRING=Endpoint=sb://iothub-ns-my-iot-hub-64462241-269f6eda4d.servicebus.windows.net/;SharedAccessKeyName=service;SharedAccessKey=MkA4ElETbP6L7qBEvtR3ugiC5BXHpw3M+AIoTCUSARM=;EntityPath=my-iot-hub-456
+  #     - EVENTHUB_CONNECTION_STRING=your_eventhub_connection_string
   #     - CONSUMER_GROUP=$Default
   #     - DEVICE_ID=48:CA:43:36:71:04
   #     - API_KEY=Xj7Bq9Lp2Rt5Zk8Mn3Vx6Hs1
@@ -70,22 +85,6 @@ services:
   #     - DATABASE_URL=postgresql://iotuser:iotpassword@postgres:5432/iotdb
   #   depends_on:
   #     - postgres
-  #   networks:
-  #     - app-network
-
-  # nginx:
-  #   image: nginx:latest
-  #   container_name: nginx-proxy
-  #   restart: always
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - ./iot-client/nginx/conf.d:/etc/nginx/conf.d
-  #     - ./iot-client/nginx/ssl:/etc/nginx/ssl
-  #     - ./iot-client/nginx/www:/var/www/html
-  #   depends_on:
-  #     - iot-client
   #   networks:
   #     - app-network
 
