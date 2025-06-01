@@ -179,10 +179,8 @@ async def get_recent_measurements(
     )
     
     if not db_measurements:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No measurements found for device {device_id} in the last {hours} hours"
-        )
+        # Return an empty list instead of raising a 404 error
+        return []
     
     # Convert database models to response format
     measurements = []
@@ -244,10 +242,8 @@ async def get_measurements_in_range(
     ).order_by(models.Measurement.enqueued_time.asc()).all()
     
     if not db_measurements:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No measurements found for device {device_id} in the specified time range"
-        )
+        # Return an empty list instead of raising a 404 error
+        return []
     
     # Convert database models to response format
     measurements = []

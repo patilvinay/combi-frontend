@@ -5,6 +5,8 @@
 
 # testing
 /coverage
+/iot_client
+
 
 # production
 /dist
