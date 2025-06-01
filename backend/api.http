@@ -12,8 +12,8 @@ Content-Type: application/json
 X-API-Key: {{apiKey}}
 
 {
-  "device_id": "48:CA:43:36:71:04",
-  "enqueued_time": "2025-05-31T12:00:00Z",
+  "device_id": "48:CA:43:36:71:48",
+  "enqueued_time": "2025-06-01T11:15:51Z",
   "phases": [
     {
       "v": 220.5,
@@ -39,8 +39,46 @@ X-API-Key: {{apiKey}}
   ]
 }
 
+@now = {{$datetime iso8601Z}}
+### Create a new measurement with empty values
+POST {{baseUrl}}/measurements/ HTTP/1.1
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "device_id": "48:CA:43:36:71:49",
+  "enqueued_time": "{{now}}",
+  "phases": [
+    {
+      "v": 221.0,
+      "i": 5.1,
+      "p": 1127.1,
+      "f": 50.0,
+      "pf": 0.99
+    },
+    {},
+    {
+      "v": 220.5,
+      "i": 4.9,
+      "p": 1080.45,
+      "f": 50.1,
+      "pf": 0.99
+    },
+    {},
+    {},
+    {
+      "v": 220.8,
+      "i": 5.2,
+      "p": 1148.16,
+      "f": 50.0,
+      "pf": 1.0
+    },
+    {}
+  ]
+}
+
 ### Get latest measurement for a device
-GET {{baseUrl}}/measurements/latest/48:CA:43:36:71:04 HTTP/1.1
+GET {{baseUrl}}/measurements/latest/48:CA:43:36:71:48 HTTP/1.1
 Content-Type: application/json
 X-API-Key: {{apiKey}}
 

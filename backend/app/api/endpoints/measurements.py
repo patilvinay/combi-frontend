@@ -119,7 +119,7 @@ async def get_latest_measurement(
     # Convert the database model to a dictionary
     measurement_dict = measurement.__dict__.copy()
     
-    # Add phases to the response
+    # Add phases to the response - always include 7 phases
     phases = []
     for i in range(1, 8):
         v = measurement_dict.get(f'v{i}')
@@ -131,7 +131,9 @@ async def get_latest_measurement(
                 'f': measurement_dict.get(f'f{i}'),
                 'pf': measurement_dict.get(f'pf{i}')
             }
-            phases.append(phase_data)
+        else:
+            phase_data = {}
+        phases.append(phase_data)
     
     # Create the response with all fields
     response = {

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from pydantic import BaseModel, Field, validator
 from typing_extensions import Annotated
@@ -47,11 +47,25 @@ class MeasurementBase(BaseModel):
         description="Unique identifier for the IoT device",
         example="48:CA:43:36:71:04"
     )
-    enqueued_time: datetime = Field(
+    enqueued_time: str = Field(
         ...,
-        description="Timestamp when the measurement was taken",
-        example="2025-05-31T12:00:00Z"
+        description="Timestamp when the measurement was taken in ISO 8601 format with 'Z' timezone (e.g., 2025-05-31T12:00:00Z)",
+        example="2025-05-31T12:00:00Z",
+        pattern=r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$'
     )
+    
+    @validator('enqueued_time')
+    def validate_iso8601_utc(cls, v):
+        """Validate that the timestamp is in ISO 8601 format with 'Z' timezone."""
+        try:
+            # Try to parse the datetime to ensure it's valid
+            dt = datetime.fromisoformat(v.replace('Z', '+00:00'))
+            # Ensure it's in UTC (ends with Z)
+            if not v.endswith('Z'):
+                raise ValueError("Timestamp must end with 'Z' for UTC")
+            return v
+        except ValueError as e:
+            raise ValueError(f"Invalid ISO 8601 UTC timestamp format: {e}")
     phases: List[PhaseData] = Field(
         ...,
         description="List of phase measurements (up to 7 phases)",
@@ -67,9 +81,19 @@ class Measurement(MeasurementBase):
     """Schema for returning measurement data."""
     id: int
     created_at: datetime
+    enqueued_time: str  # Override to ensure string output
 
     class Config:
         orm_mode = True
+        
+    @validator('enqueued_time', pre=True)
+    def format_enqueued_time(cls, v):
+        """Convert datetime to ISO 8601 string with 'Z' timezone."""
+        if isinstance(v, datetime):
+            if v.tzinfo is None:
+                v = v.replace(tzinfo=timezone.utc)
+            return v.isoformat().replace('+00:00', 'Z')
+        return v
 
 class MeasurementResponse(BaseModel):
     """Response schema for measurement operations."""
