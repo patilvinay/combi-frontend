@@ -13,7 +13,11 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  SelectChangeEvent
+  SelectChangeEvent,
+  Tabs,
+  Tab,
+  Card,
+  CardContent
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { 
@@ -24,7 +28,8 @@ import {
   CartesianGrid, 
   Tooltip, 
   Legend, 
-  ResponsiveContainer 
+  ResponsiveContainer,
+  Text
 } from 'recharts';
 import { deviceService, Measurement } from '../services/deviceService';
 
@@ -39,12 +44,16 @@ const DeviceDetail: React.FC = () => {
   const [timeSeriesData, setTimeSeriesData] = useState<Measurement[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState<number>(2); // Default to 2 hours
-  const [selectedMetric, setSelectedMetric] = useState<string>('v'); // Default to voltage
+  const [timeRange, setTimeRange] = useState<number>(2);
+  const [selectedMetric, setSelectedMetric] = useState<string>('v');
+  const [selectedChannel, setSelectedChannel] = useState<number>(0);
+  const [selectedChannels, setSelectedChannels] = useState<{[key: number]: boolean}>({
+    0: true, 1: true, 2: true, 3: true, 4: true, 5: true, 6: true
+  });
 
   useEffect(() => {
     if (!deviceId) {
-      setError('Device ID is required');
+      setError('No device ID provided');
       setLoading(false);
       return;
     }
@@ -54,15 +63,24 @@ const DeviceDetail: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        // Fetch latest measurement using device service
+        // Fetch latest measurement
         const latest = await deviceService.getLatestMeasurement(deviceId);
         setLatestMeasurement(latest);
         
-        // Fetch time series data using device service
-        const timeSeries = await deviceService.getRecentMeasurements(deviceId, timeRange);
-        setTimeSeriesData(timeSeries);
-      } catch (error) {
-        console.error('Error fetching device data:', error);
+        // Fetch time series data
+        const endTime = new Date();
+        const startTime = new Date();
+        startTime.setHours(startTime.getHours() - timeRange);
+        
+        const timeSeries = await deviceService.getMeasurementsInRange(
+          deviceId,
+          startTime.toISOString(),
+          endTime.toISOString()
+        );
+        
+        setTimeSeriesData(timeSeries || []);
+      } catch (err) {
+        console.error('Error fetching device data:', err);
         setError('Failed to fetch device data. Please try again later.');
       } finally {
         setLoading(false);
@@ -71,14 +89,12 @@ const DeviceDetail: React.FC = () => {
 
     fetchData();
     
-    // Set up polling every 30 seconds to keep data fresh
+    // Set up polling every 30 seconds
     const intervalId = setInterval(fetchData, 30000);
     
-    return () => {
-      clearInterval(intervalId);
-    };
+    return () => clearInterval(intervalId);
   }, [deviceId, timeRange]);
-  
+
   const handleTimeRangeChange = (event: SelectChangeEvent) => {
     setTimeRange(Number(event.target.value));
   };
@@ -88,39 +104,31 @@ const DeviceDetail: React.FC = () => {
   };
 
   const formatChartData = (data: Measurement[]) => {
-    if (!data || data.length === 0) {
-      return [];
-    }
+    if (!data || data.length === 0) return [];
     
     return data.map(measurement => {
-      const result: any = {
-        time: new Date(measurement.enqueued_time).toLocaleTimeString(),
-        timestamp: measurement.enqueued_time,
+      const formattedData: any = {
+        time: new Date(measurement.enqueued_time).toLocaleTimeString()
       };
       
-      // Ensure we handle all 7 possible channels
-      for (let i = 0; i < 7; i++) {
-        const phase = measurement.phases[i];
-        
-        // Make sure the phase exists and has the selected metric
-        if (phase && phase[selectedMetric as keyof typeof phase] !== undefined) {
-          result[`phase${i + 1}`] = phase[selectedMetric as keyof typeof phase];
-        } else {
-          result[`phase${i + 1}`] = null; // Use null instead of 0 to handle missing data properly
+      // Add data for each channel
+      measurement.phases.forEach((phase, index) => {
+        if (phase) {
+          formattedData[`phase${index + 1}`] = phase[selectedMetric as keyof typeof phase];
         }
-      }
+      });
       
-      return result;
-    }).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      return formattedData;
+    });
   };
 
   const getMetricUnit = () => {
     switch (selectedMetric) {
-      case 'v': return 'V';
-      case 'i': return 'A';
-      case 'p': return 'W';
-      case 'f': return 'Hz';
-      case 'pf': return '';
+      case 'v': return 'Voltage (V)';
+      case 'i': return 'Current (A)';
+      case 'p': return 'Power (W)';
+      case 'f': return 'Frequency (Hz)';
+      case 'pf': return 'Power Factor';
       default: return '';
     }
   };
@@ -132,12 +140,12 @@ const DeviceDetail: React.FC = () => {
       case 'p': return 'Power';
       case 'f': return 'Frequency';
       case 'pf': return 'Power Factor';
-      default: return selectedMetric;
+      default: return '';
     }
   };
 
   const getLineColors = () => [
-    '#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088fe', '#00C49F', '#FFBB28'
+    '#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088FE', '#00C49F', '#FFBB28'
   ];
 
   if (loading) {
@@ -149,11 +157,16 @@ const DeviceDetail: React.FC = () => {
   }
 
   if (error) {
-    return <Alert severity="error">{error}</Alert>;
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="300px">
+        <Alert severity="error">{error}</Alert>
+      </Box>
+    );
   }
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      {/* Header with back button */}
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <Button 
           component={Link} 
@@ -163,143 +176,270 @@ const DeviceDetail: React.FC = () => {
         >
           Back to Devices
         </Button>
-        <Typography variant="h4" component="h1" sx={{ mb: 0 }}>
+        <Typography variant="h4" component="h1">
           Device: {deviceId}
         </Typography>
       </Box>
-      
-      {latestMeasurement ? (
-        <Paper sx={{ p: 3, mb: 4 }}>
-          <Typography variant="h6" gutterBottom>
-            Latest Measurement
-          </Typography>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Timestamp: {new Date(latestMeasurement.enqueued_time).toLocaleString()}
-          </Typography>
-          
-          <Grid container spacing={3} sx={{ mt: 1 }}>
-            {/* Display up to 7 channels (phases) */}
-            {Array.from({ length: 7 }).map((_, index) => {
-              const phase = latestMeasurement.phases[index];
-              if (!phase) return null; // Skip if phase doesn't exist
-              
-              return (
-                <Grid item xs={12} sm={6} md={4} lg={3} key={index}>
-                  <Paper elevation={2} sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', color: getLineColors()[index] }}>
-                      Channel {index + 1}
-                    </Typography>
-                    <Typography variant="body2">
-                      Voltage: {phase.v?.toFixed(2) || 'N/A'} V
-                    </Typography>
-                    <Typography variant="body2">
-                      Current: {phase.i?.toFixed(2) || 'N/A'} A
-                    </Typography>
-                    <Typography variant="body2">
-                      Power: {phase.p?.toFixed(2) || 'N/A'} W
-                    </Typography>
-                    <Typography variant="body2">
-                      Frequency: {phase.f?.toFixed(2) || 'N/A'} Hz
-                    </Typography>
-                    <Typography variant="body2">
-                      Power Factor: {phase.pf?.toFixed(2) || 'N/A'}
-                    </Typography>
-                  </Paper>
-                </Grid>
-              );
-            })}
+
+      {/* Latest Measurement */}
+      <Paper sx={{ p: 3, mb: 4 }}>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+          <Tabs 
+            value={selectedChannel}
+            onChange={(_, newValue) => setSelectedChannel(newValue)}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            {Array.from({ length: 7 }).map((_, index) => (
+              <Tab 
+                key={`tab-${index}`}
+                label={`Channel ${index + 1}${!latestMeasurement?.phases?.[index] ? ' (N/A)' : ''}`}
+                disabled={!latestMeasurement?.phases?.[index]}
+                sx={{ 
+                  minWidth: 120,
+                  opacity: latestMeasurement?.phases?.[index] ? 1 : 0.7,
+                  '&.Mui-selected': {
+                    color: getLineColors()[index],
+                    borderBottom: `2px solid ${getLineColors()[index]}`
+                  }
+                }}
+              />
+            ))}
+          </Tabs>
+        </Box>
+
+        {latestMeasurement?.phases?.[selectedChannel] ? (
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography variant="subtitle2" color="text.secondary">Voltage (V)</Typography>
+                  <Typography variant="h5" color={getLineColors()[selectedChannel]}>
+                    {latestMeasurement.phases[selectedChannel]?.v?.toFixed(2) || 'N/A'}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography variant="subtitle2" color="text.secondary">Current (A)</Typography>
+                  <Typography variant="h5" color={getLineColors()[selectedChannel]}>
+                    {latestMeasurement.phases[selectedChannel]?.i?.toFixed(2) || 'N/A'}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography variant="subtitle2" color="text.secondary">Power (W)</Typography>
+                  <Typography variant="h5" color={getLineColors()[selectedChannel]}>
+                    {latestMeasurement.phases[selectedChannel]?.p?.toFixed(2) || 'N/A'}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography variant="subtitle2" color="text.secondary">Frequency (Hz)</Typography>
+                  <Typography variant="h5" color={getLineColors()[selectedChannel]}>
+                    {latestMeasurement.phases[selectedChannel]?.f?.toFixed(2) || 'N/A'}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography variant="subtitle2" color="text.secondary">Power Factor</Typography>
+                  <Typography variant="h5" color={getLineColors()[selectedChannel]}>
+                    {latestMeasurement.phases[selectedChannel]?.pf?.toFixed(2) || 'N/A'}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography variant="subtitle2" color="text.secondary">Last Updated</Typography>
+                  <Typography variant="body2">
+                    {latestMeasurement ? new Date(latestMeasurement.enqueued_time).toLocaleString() : 'N/A'}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
           </Grid>
-        </Paper>
-      ) : (
-        <Paper sx={{ p: 3, mb: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
-          <Typography variant="h6" color="text.secondary">
-            No Latest Measurement Data Available
-          </Typography>
-        </Paper>
-      )}
-      
-      <Paper sx={{ p: 3 }}>
+        ) : (
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            minHeight: 200,
+            bgcolor: 'action.hover',
+            borderRadius: 1,
+            p: 3,
+            textAlign: 'center'
+          }}>
+            <Typography variant="body1" color="text.secondary">
+              No data available for Channel {selectedChannel + 1}
+            </Typography>
+          </Box>
+        )}
+      </Paper>
+
+      {/* Time Series Chart */}
+      <Paper sx={{ p: 3, mb: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h6">
             {getMetricName()} Time Series
           </Typography>
           <Box sx={{ display: 'flex', gap: 2 }}>
             <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel id="metric-select-label">Metric</InputLabel>
+              <InputLabel id="time-range-label">Time Range</InputLabel>
               <Select
-                labelId="metric-select-label"
-                value={selectedMetric}
-                label="Metric"
-                onChange={handleMetricChange}
-              >
-                <MenuItem value="v">Voltage (V)</MenuItem>
-                <MenuItem value="i">Current (A)</MenuItem>
-                <MenuItem value="p">Power (W)</MenuItem>
-                <MenuItem value="f">Frequency (Hz)</MenuItem>
-                <MenuItem value="pf">Power Factor</MenuItem>
-              </Select>
-            </FormControl>
-            
-            <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel id="time-range-select-label">Time Range</InputLabel>
-              <Select
-                labelId="time-range-select-label"
+                labelId="time-range-label"
                 value={timeRange.toString()}
                 label="Time Range"
                 onChange={handleTimeRangeChange}
               >
-                <MenuItem value="1">Last 1 hour</MenuItem>
-                <MenuItem value="2">Last 2 hours</MenuItem>
-                <MenuItem value="6">Last 6 hours</MenuItem>
-                <MenuItem value="12">Last 12 hours</MenuItem>
-                <MenuItem value="24">Last 24 hours</MenuItem>
+                <MenuItem value={1}>1 Hour</MenuItem>
+                <MenuItem value={2}>2 Hours</MenuItem>
+                <MenuItem value={6}>6 Hours</MenuItem>
+                <MenuItem value={12}>12 Hours</MenuItem>
+                <MenuItem value={24}>24 Hours</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel id="metric-label">Metric</InputLabel>
+              <Select
+                labelId="metric-label"
+                value={selectedMetric}
+                label="Metric"
+                onChange={handleMetricChange}
+              >
+                <MenuItem value="v">Voltage</MenuItem>
+                <MenuItem value="i">Current</MenuItem>
+                <MenuItem value="p">Power</MenuItem>
+                <MenuItem value="f">Frequency</MenuItem>
+                <MenuItem value="pf">Power Factor</MenuItem>
               </Select>
             </FormControl>
           </Box>
         </Box>
-        
+
+        {/* Channel Selection */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>Show Channels:</Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {Array.from({ length: 7 }).map((_, index) => {
+              const hasData = timeSeriesData.some(m => m.phases?.[index]);
+              return (
+                <Button
+                  key={`channel-btn-${index}`}
+                  variant={selectedChannels[index] ? 'contained' : 'outlined'}
+                  size="small"
+                  onClick={() => {
+                    setSelectedChannels(prev => ({
+                      ...prev,
+                      [index]: !prev[index]
+                    }));
+                  }}
+                  disabled={!hasData}
+                  sx={{
+                    minWidth: 40,
+                    bgcolor: selectedChannels[index] ? getLineColors()[index] : 'transparent',
+                    color: selectedChannels[index] ? 'white' : 'text.primary',
+                    borderColor: getLineColors()[index],
+                    opacity: hasData ? 1 : 0.6,
+                    '&:hover': {
+                      bgcolor: selectedChannels[index] ? getLineColors()[index] : 'action.hover',
+                    },
+                  }}
+                >
+                  {index + 1}
+                </Button>
+              );
+            })}
+          </Box>
+        </Box>
+
+        {/* Chart */}
         <Box sx={{ width: '100%', height: 400 }}>
-          {timeSeriesData.length > 0 ? (
-            <ResponsiveContainer>
-              <LineChart
-                data={formatChartData(timeSeriesData)}
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="time" />
-                <YAxis label={{ value: getMetricUnit(), angle: -90, position: 'insideLeft' }} />
-                <Tooltip />
-                <Legend />
-                {/* Display up to 7 channels in the chart */}
-                {Array.from({ length: 7 }).map((_, index) => {
-                  // Check if we have data for this channel in any measurement
-                  const hasChannel = timeSeriesData.some(m => 
-                    m.phases[index] && m.phases[index][selectedMetric as keyof typeof m.phases[0]] !== undefined
-                  );
-                  
-                  if (!hasChannel) return null;
-                  
+          <ResponsiveContainer>
+            <LineChart
+              data={formatChartData(timeSeriesData)}
+              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+            >
+              <defs>
+                <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#8884d8" stopOpacity={0.1}/>
+                  <stop offset="95%" stopColor="#8884d8" stopOpacity={0.05}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="time" />
+              <YAxis label={{ value: getMetricUnit(), angle: -90, position: 'insideLeft' }} />
+              <Tooltip />
+              <Legend />
+              
+              {/* No data watermark */}
+              {timeSeriesData.length === 0 && (
+                <Text
+                  x="50%"
+                  y="50%"
+                  textAnchor="middle"
+                  verticalAnchor="middle"
+                  style={{
+                    fontSize: 24,
+                    fill: 'rgba(0, 0, 0, 0.2)',
+                    fontWeight: 'bold',
+                    pointerEvents: 'none'
+                  }}
+                >
+                  No Data Available
+                </Text>
+              )}
+              
+              {/* Channel lines */}
+              {Array.from({ length: 7 }).map((_, index) => {
+                if (!selectedChannels[index]) return null;
+                
+                const hasData = timeSeriesData.some(m => m.phases?.[index]);
+                const color = getLineColors()[index];
+                
+                if (!hasData) {
                   return (
                     <Line
-                      key={`channel${index + 1}`}
+                      key={`channel-${index}`}
                       type="monotone"
                       dataKey={`phase${index + 1}`}
-                      name={`Channel ${index + 1}`}
-                      stroke={getLineColors()[index % getLineColors().length]}
-                      activeDot={{ r: 8 }}
+                      name={`Channel ${index + 1} (No Data)`}
+                      stroke={color}
+                      strokeDasharray="5 5"
+                      strokeOpacity={0.5}
+                      dot={false}
+                      activeDot={false}
                       connectNulls={true}
                     />
                   );
-                })}
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', bgcolor: '#f5f5f5', borderRadius: 1 }}>
-              <Typography variant="h6" color="text.secondary">
-                No Time Series Data Available
-              </Typography>
-            </Box>
-          )}
+                }
+                
+                return (
+                  <Line
+                    key={`channel-${index}`}
+                    type="monotone"
+                    dataKey={`phase${index + 1}`}
+                    name={`Channel ${index + 1}`}
+                    stroke={color}
+                    activeDot={{ r: 4 }}
+                    connectNulls={true}
+                  />
+                );
+              })}
+            </LineChart>
+          </ResponsiveContainer>
         </Box>
       </Paper>
     </Container>
