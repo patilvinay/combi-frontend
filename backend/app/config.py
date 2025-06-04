@@ -24,7 +24,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://iotuser:iotpassword@localhost:5432/iotdb"
     
     # CORS settings
-    CORS_ORIGINS: List[AnyHttpUrl] = ["http://localhost:3000", "http://localhost:5050"]
+    # For development, allow all origins
+    CORS_ORIGINS: List[str] = ["*"]
     
     # Security settings
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
