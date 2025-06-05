@@ -41,6 +41,11 @@ services:
         condition: service_healthy
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5050/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     command: ["/app/start.sh"]
   #       uvicorn app.main:app --host 0.0.0.0 --port 5050
   #     "

@@ -34,6 +34,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder
@@ -51,8 +52,9 @@ RUN chmod +x /app/start.sh
 # Expose port
 EXPOSE 5050
 
-# Command to run the application
-CMD ["/app/start.sh"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:5050/health || exit 1
 
 # Create a non-root user and switch to it
 RUN groupadd -r appuser && useradd -r -g appuser appuser \
@@ -60,11 +62,10 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser \
 USER appuser
 
 # Expose the port the app runs on
-EXPOSE 5050
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5050/health || exit 1
+# EXPOSE 5050
 
 # Command to run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5050", "--proxy-headers"]
+# CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5050", "--proxy-headers"]
+
+# Command to run the application
+CMD ["/app/start.sh"]
