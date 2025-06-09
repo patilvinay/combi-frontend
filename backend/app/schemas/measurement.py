@@ -82,6 +82,7 @@ class Measurement(MeasurementBase):
     id: int
     created_at: datetime
     enqueued_time: str  # Override to ensure string output
+    isConnected: Optional[bool] = False  # Device connection status
 
     class Config:
         orm_mode = True

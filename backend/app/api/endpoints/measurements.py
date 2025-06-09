@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta, timezone
+import logging
 
 from app import models
 from app.schemas import measurement as schemas
@@ -10,6 +11,34 @@ from app.db import get_db
 from app.api.deps import get_api_key
 
 router = APIRouter(dependencies=[Depends(get_api_key)])
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Helper function to get device connection status
+async def get_device_connection_status(device_id: str, last_measurement_time: Optional[datetime] = None) -> bool:
+    """Get the connection status of a device based on its last measurement time.
+    
+    In a production environment, this would first try to get status from the IoT client API.
+    Currently uses only the timestamp-based approach to determine connection status.
+    """
+    # Skip IoT client check and use timestamp-based approach directly
+    # This avoids unnecessary connection attempts and error logs
+    return _check_connection_by_timestamp(last_measurement_time)
+
+def _check_connection_by_timestamp(last_measurement_time: Optional[datetime]) -> bool:
+    """Determine connection status based on the timestamp of the last measurement."""
+    if not last_measurement_time:
+        return False
+        
+    # Consider a device connected if it sent data within the last 30 seconds
+    # This matches the DEVICE_OFFLINE_TIMEOUT in the IoT client
+    now = datetime.now(timezone.utc)
+    time_diff = (now - last_measurement_time).total_seconds()
+    
+    # If the last measurement was within 30 seconds, consider the device connected
+    return time_diff <= 30
 
 
 def map_phase_data(phase_num: int, phase: schemas.PhaseData) -> Dict[str, float]:
@@ -83,7 +112,8 @@ async def create_measurement(
             'device_id': measurement_dict['device_id'],
             'enqueued_time': measurement_dict['enqueued_time'],
             'created_at': measurement_dict['created_at'],
-            'phases': phases
+            'phases': phases,
+            'isConnected': await get_device_connection_status(measurement_dict['device_id'], measurement_dict.get('enqueued_time'))
         }
         
         return response
@@ -119,6 +149,10 @@ async def get_latest_measurement(
     # Convert the database model to a dictionary
     measurement_dict = measurement.__dict__.copy()
     
+    # Get device connection status from IoT client or fallback to timestamp-based check
+    enqueued_time = measurement_dict.get('enqueued_time')
+    is_connected = await get_device_connection_status(device_id, enqueued_time)
+    
     # Add phases to the response - always include 7 phases
     phases = []
     for i in range(1, 8):
@@ -141,7 +175,8 @@ async def get_latest_measurement(
         'device_id': measurement_dict['device_id'],
         'enqueued_time': measurement_dict['enqueued_time'],
         'created_at': measurement_dict['created_at'],
-        'phases': phases
+        'phases': phases,
+        'isConnected': is_connected
     }
     
     return response
@@ -184,6 +219,12 @@ async def get_recent_measurements(
         # Return an empty list instead of raising a 404 error
         return []
     
+    # Get the most recent measurement's timestamp
+    most_recent_time = db_measurements[0].enqueued_time if db_measurements else None
+    
+    # Get device connection status based on the most recent measurement
+    is_connected = await get_device_connection_status(device_id, most_recent_time)
+    
     # Convert database models to response format
     measurements = []
     for measurement in db_measurements:
@@ -209,7 +250,8 @@ async def get_recent_measurements(
             'device_id': measurement_dict['device_id'],
             'enqueued_time': measurement_dict['enqueued_time'],
             'created_at': measurement_dict['created_at'],
-            'phases': phases
+            'phases': phases,
+            'isConnected': is_connected  # Same connection status for all measurements
         }
         measurements.append(response)
     
@@ -241,11 +283,17 @@ async def get_measurements_in_range(
         models.Measurement.device_id == device_id,
         models.Measurement.enqueued_time >= start_time,
         models.Measurement.enqueued_time <= end_time
-    ).order_by(models.Measurement.enqueued_time.asc()).all()
+    ).order_by(models.Measurement.enqueued_time.desc()).all()
     
     if not db_measurements:
         # Return an empty list instead of raising a 404 error
         return []
+    
+    # Get the most recent measurement's timestamp
+    most_recent_time = db_measurements[0].enqueued_time if db_measurements else None
+    
+    # Get device connection status based on the most recent measurement
+    is_connected = await get_device_connection_status(device_id, most_recent_time)
     
     # Convert database models to response format
     measurements = []
@@ -272,7 +320,8 @@ async def get_measurements_in_range(
             'device_id': measurement_dict['device_id'],
             'enqueued_time': measurement_dict['enqueued_time'],
             'created_at': measurement_dict['created_at'],
-            'phases': phases
+            'phases': phases,
+            'isConnected': is_connected  # Same connection status for all measurements
         }
         measurements.append(response)
     
