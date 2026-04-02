@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Security
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import text
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from datetime import datetime, timedelta, timezone
 import logging
 
@@ -15,6 +14,14 @@ router = APIRouter(dependencies=[Depends(get_api_key)])
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def parse_enqueued_time(value: str) -> datetime:
+    """Parse firmware ISO 8601 timestamps and normalize them to UTC."""
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 # Helper function to get device connection status
 async def get_device_connection_status(device_id: str, last_measurement_time: Optional[datetime] = None) -> bool:
@@ -73,7 +80,7 @@ async def create_measurement(
     # Create a dictionary with all phase data
     data = {
         "device_id": measurement.device_id,
-        "enqueued_time": measurement.enqueued_time
+        "enqueued_time": parse_enqueued_time(measurement.enqueued_time),
     }
     
     # Add phase data for each phase (up to 7 phases)

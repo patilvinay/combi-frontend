@@ -12,39 +12,46 @@ CREATE TABLE measurements (
     v1 FLOAT,
     i1 FLOAT,
     p1 FLOAT,
+    f1 FLOAT,
     pf1 FLOAT,
     
     -- Phase 2
     v2 FLOAT,
     i2 FLOAT,
     p2 FLOAT,
+    f2 FLOAT,
     pf2 FLOAT,
     
     -- Phase 3
     v3 FLOAT,
     i3 FLOAT,
     p3 FLOAT,
+    f3 FLOAT,
     pf3 FLOAT,
     
     -- Additional phases if needed
     v4 FLOAT,
     i4 FLOAT,
     p4 FLOAT,
+    f4 FLOAT,
     pf4 FLOAT,
     
     v5 FLOAT,
     i5 FLOAT,
     p5 FLOAT,
+    f5 FLOAT,
     pf5 FLOAT,
     
     v6 FLOAT,
     i6 FLOAT,
     p6 FLOAT,
+    f6 FLOAT,
     pf6 FLOAT,
     
     v7 FLOAT,
     i7 FLOAT,
     p7 FLOAT,
+    f7 FLOAT,
     pf7 FLOAT,
     
     -- Common measurements

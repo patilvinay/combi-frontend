@@ -21,6 +21,18 @@ engine: Engine = create_engine(
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
+def ensure_measurements_columns(conn) -> None:
+    """Backfill missing phase-frequency columns for existing deployments."""
+    missing_safe_columns = [f"f{i}" for i in range(1, 8)]
+    for column in missing_safe_columns:
+        conn.execute(
+            text(
+                f"ALTER TABLE measurements "
+                f"ADD COLUMN IF NOT EXISTS {column} DOUBLE PRECISION"
+            )
+        )
+
 def get_db() -> Generator[Session, None, None]:
     """
     Dependency function that yields a database session.
@@ -48,6 +60,7 @@ def init_db() -> None:
     
     # Create additional indexes if needed
     with engine.connect() as conn:
+        ensure_measurements_columns(conn)
         conn.execute(text("""
             CREATE INDEX IF NOT EXISTS idx_measurements_device_enqueued 
             ON measurements(device_id, enqueued_time DESC)
